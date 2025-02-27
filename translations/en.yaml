@@ -8,7 +8,10 @@ configuration:
   tedapi_password:
     name: Powerwall 3 Password
     description: >-
-      The password printed inside the Powerwall 3.
+      The password printed inside the Powerwall 3.  It is on the same sticker
+      that has the WiFi network name (which so far has always been similar to
+      "TeslaPW_something").  The ones I've encountered have been 10 characters
+      long.
   tedapi_report_vitals:
     name: Report Powerwall Vitals
     description: >-

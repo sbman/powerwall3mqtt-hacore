@@ -3,20 +3,20 @@ class TEDAPIException(Exception):
     pass
 
 class TEDAPIRateLimitedException(TEDAPIException):
-    # 'Rate limit cooldown period - Pausing API calls'
-    pass
+    def __init__(self):
+        super().__init__(self, "Possible Rate limiting by Powerwall - API calls paused")
 
 class TEDAPIRateLimitingException(TEDAPIException):
-    # 'Possible Rate limited by Powerwall at - Activating 5 minute cooldown'
-    pass
+    def __init__(self):
+        super().__init__(self, "Possible Rate limiting by Powerwall - Activating cooldown")
 
 class TEDAPIAccessDeniedException(TEDAPIException):
-    # "Access Denied: Check your Gateway Password"
-    pass
+    def __init__(self):
+        super().__init__(self, "Access Denied: Check your Gateway Password")
 
 class TEDAPINotConnectedException(TEDAPIException):
-    # "Not Connected - Unable to get configuration"
-    pass
+    def __init__(self):
+        super().__init__(self, "Not Connected - Unable to get configuration")
 
 
 

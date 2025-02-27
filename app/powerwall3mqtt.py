@@ -5,6 +5,7 @@ import logging
 import logging.config
 import os
 import random
+import re
 import requests.exceptions
 import signal
 import socket
@@ -107,7 +108,11 @@ class powerwall3mqtt:
 
         logger.debug(f"Runtime config:")
         for key in sorted(config.keys()):
-            logger.debug(f"config['{key}'] = {getattr(self, key)}")
+            if key.find('password') == -1:
+                logger.debug(f"config['{key}'] = {getattr(self, key)}")
+            else:
+                redacted = re.sub('.', 'X', getattr(self, key))
+                logger.debug(f"config['{key}'] = {redacted}")
 
 
     def catch(self, signum, frame):

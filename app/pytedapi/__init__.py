@@ -250,13 +250,13 @@ class TEDAPI:
             case 429 | 503:
                 # Rate limited - Switch to cooldown mode
                 self.pwcooldown = time.perf_counter() + self.cooldown
-                raise TEDAPIRateLimitingException(self.pwcooldown)
+                raise exceptions.TEDAPIRateLimitingException(self.pwcooldown)
             case 403:
-                raise TEDAPIAccessDeniedException()
+                raise exceptions.TEDAPIAccessDeniedException()
             case 200:
                 pass
             case _:
-                raise TEDAPIException(r.status_code)
+                raise exceptions.TEDAPIException(r.status_code)
 
 
     def request(self, path, force=False):
@@ -275,7 +275,7 @@ class TEDAPI:
             TEDAPIException
         """
         if not force and self.pwcooldown > time.perf_counter():
-            raise TEDAPIRateLimitedException()
+            raise exceptions.TEDAPIRateLimitedException()
         with self._apiLock:
             url = f'https://{self.gw_ip}/%s' % path
             r = requests.get(url,
@@ -304,7 +304,7 @@ class TEDAPI:
             TEDAPIException
         """
         if not force and self.pwcooldown > time.perf_counter():
-            raise TEDAPIRateLimitedException()
+            raise exceptions.TEDAPIRateLimitedException()
         with self._apiLock:
             url = f'https://{self.gw_ip}/%s' % path
             r = requests.post(url,
@@ -335,7 +335,7 @@ class TEDAPI:
             logger.debug("Fetching din from Powerwall...")
             r = self.request("tedapi/din", force=force)
             if self.din not in (None, r.text):
-                raise TEDAPIException(f"DIN changed from '{self.din}' to '{r.text}'")
+                raise exceptions.TEDAPIException(f"DIN changed from '{self.din}' to '{r.text}'")
             self.din = r.text
             return self.din
 
@@ -697,7 +697,7 @@ class TEDAPI:
         Note: Raises exception on previous Powerwall versions
         """
         if not self.pw3:
-            raise TEDAPIPowerwallVersionException()
+            raise exceptions.TEDAPIPowerwallVersionException()
 
         with self._componentsLock:
             if not force:
@@ -751,7 +751,7 @@ class TEDAPI:
         Note: Raises exception on previous Powerwall versions
         """
         if not self.pw3:
-            raise TEDAPIPowerwallVersionException()
+            raise exceptions.TEDAPIPowerwallVersionException()
 
         key = "%s-block" % din
 
