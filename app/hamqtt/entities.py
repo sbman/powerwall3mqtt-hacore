@@ -32,7 +32,7 @@ class Entity:
 
 class ValueEntity(Entity):
     def __init__(self, id_prefix, name, type, template = None, device_class = None, unit = None, state_class = None, enabled = True):
-        Entity.__init__(self, id_prefix, name, type, template, device_class, unit, state_class, enabled)
+        super().__init__(id_prefix, name, type, template, device_class, unit, state_class, enabled)
         if template == None:
             self.template = name.lower().replace(' ', '_')
 
@@ -51,7 +51,7 @@ class ValueEntity(Entity):
 
 class Battery(ValueEntity):
     def __init__(self, id_prefix, name, template = None, enabled = True):
-        ValueEntity.__init__(self,
+        super().__init__(
             id_prefix=id_prefix,
             name=name,
             type="sensor",
@@ -63,7 +63,7 @@ class Battery(ValueEntity):
 
 class Connectivity(ValueEntity):
     def __init__(self, id_prefix, name, template = None, enabled = True):
-        ValueEntity.__init__(self,
+        super().__init__(
             id_prefix=id_prefix,
             name=name,
             type="binary_sensor",
@@ -74,7 +74,7 @@ class Connectivity(ValueEntity):
 
 class Current(ValueEntity):
     def __init__(self, id_prefix, name, template = None, enabled = True):
-        ValueEntity.__init__(self,
+        super().__init__(
             id_prefix=id_prefix,
             name=name,
             type="sensor",
@@ -86,7 +86,7 @@ class Current(ValueEntity):
 
 class Duration(ValueEntity):
     def __init__(self, id_prefix, name, template = None, enabled = True):
-        ValueEntity.__init__(self,
+        super().__init__(
             id_prefix=id_prefix,
             name=name,
             type="sensor",
@@ -98,7 +98,7 @@ class Duration(ValueEntity):
 
 class EnergyStorage(ValueEntity):
     def __init__(self, id_prefix, name, template = None, enabled = True):
-        ValueEntity.__init__(self,
+        super().__init__(
             id_prefix=id_prefix,
             name=name,
             type="sensor",
@@ -110,7 +110,7 @@ class EnergyStorage(ValueEntity):
 
 class PowerTemplate(Entity):
     def __init__(self, id_prefix, name, template = None, enabled = True):
-        Entity.__init__(self,
+        super().__init__(
             id_prefix=id_prefix,
             name=name,
             type="sensor",
@@ -123,7 +123,7 @@ class PowerTemplate(Entity):
 
 class PowerValue(ValueEntity):
     def __init__(self, id_prefix, name, template = None, enabled = True):
-        ValueEntity.__init__(self,
+        super().__init__(
             id_prefix=id_prefix,
             name=name,
             type="sensor",
@@ -136,7 +136,7 @@ class PowerValue(ValueEntity):
 
 class Running(ValueEntity):
     def __init__(self, id_prefix, name, template = None, enabled = True):
-        ValueEntity.__init__(self,
+        super().__init__(
             id_prefix=id_prefix,
             name=name,
             type="binary_sensor",
@@ -147,7 +147,7 @@ class Running(ValueEntity):
 
 class Timestamp(ValueEntity):
     def __init__(self, id_prefix, name, template = None, enabled = True):
-        ValueEntity.__init__(self,
+        super().__init__(
             id_prefix=id_prefix,
             name=name,
             type="sensor",
@@ -158,7 +158,7 @@ class Timestamp(ValueEntity):
 
 class Voltage(ValueEntity):
     def __init__(self, id_prefix, name, template = None, enabled = True):
-        ValueEntity.__init__(self,
+        super().__init__(
             id_prefix=id_prefix,
             name=name,
             type="sensor",

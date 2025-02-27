@@ -5,6 +5,7 @@ import logging
 import logging.config
 import os
 import random
+import requests.exceptions
 import signal
 import socket
 import threading
@@ -43,6 +44,10 @@ with open("logger.yaml") as stream:
 logger = logging.getLogger(__name__)
 
 
+class FatalError(Exception):
+    pass
+
+
 class powerwall3mqtt:
     def __init__(self):
         self.mqtt = None
@@ -60,9 +65,10 @@ class powerwall3mqtt:
         # Parse the config file
         config = {
             'log_level': 'WARNING',
-            'tedapi_report_vitals': False,
-            'tedapi_poll_interval': 30,
+            'tedapi_host': pytedapi.GW_IP,
             'tedapi_password': None,
+            'tedapi_poll_interval': 30,
+            'tedapi_report_vitals': False,
             'mqtt_base_topic': 'homeassistant',
             'mqtt_host': None,
             'mqtt_port': 1883,
@@ -201,20 +207,19 @@ class powerwall3mqtt:
                             self.setPause(True)
                     elif key.fileobj == self._update_loop[0]:
                         self._update_loop[0].recv(1)
-                        logger.info("Processing update from timing_loop")
+                        logger.debug("Processing update from timing_loop")
                         self.update(True)
-                except tedapi.TEDAPIRateLimitingException as e:
+                except pytedapi.exceptions.TEDAPIRateLimitingException as e:
                     self.tedapi_poll_interval += 1
-                    logger.warning(e, exc_info=True)
-                    logger.warning(f"Increasing poll interval by 1 to {self.tedapi_poll_interval}")
+                    logger.warning(e)
+                    logger.warning(f"Increasing poll interval by 1s to {self.tedapi_poll_interval}")
+                except pytedapi.exceptions.TEDAPIException as e:
+                    # Likely fatal, bail out
+                    self.setRunning(False)
+                    raise e
                 except TimeoutException as e:
                     # Likely lock timeout, skip interval
                     logger.warning(e, exc_info=True)
-                except tedapi.TEDAPIException as e:
-                    # Likely fatal, bail out
-                    self.setRunning(False)
-                    logger.critical(e, exc_info=True)
-                    return
                 except Exception as e:
                     logger.exception(e)
 
@@ -226,15 +231,20 @@ class powerwall3mqtt:
 
         # Connect to remote services
         self.connect_mqtt()
-        self.tedapi = pytedapi.TEDAPI(
-            self.tedapi_password,
-            cacheexpire=4,
-            configexpire=29)
+        try:
+            self.tedapi = pytedapi.TEDAPI(
+                self.tedapi_password,
+                cacheexpire=4,
+                configexpire=29,
+                host=self.tedapi_host)
+        except requests.exceptions.ConnectionError as e:
+            raise FatalError("Unable to connect to Powerwall")
         if not self.tedapi.pw3:
-            raise Exception("Powerwall appears to be older than Powerwall 3")
+            raise FatalError("Powerwall appears to be older than Powerwall 3")
 
         # Populate Tesla info
         self.tesla = hamqtt.devices.TeslaSystem(self.mqtt_base_topic, self.tedapi, self.tedapi_report_vitals)
+        logger.info("Powerwall firmware version = %s" % self.tesla.firmware_version)
         # TODO: Check for commission date being valid
 
         # TODO: use qos=1 or 2 for initial / unpause, 0 for normal
@@ -253,7 +263,6 @@ class powerwall3mqtt:
             logger.exception(e)
         finally:
             self.mqtt.loop_stop()
-        return 0
 
 
     def timing_loop(self):
@@ -282,6 +291,9 @@ if __name__ == '__main__':
     try:
         app = powerwall3mqtt()
         app.run()
+    except FatalError as e:
+        logger.critical("Exiting: %s" % e)
+        exit(1)
     except Exception as e:
         logger.exception(e)
         exit(1)

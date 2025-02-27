@@ -82,7 +82,7 @@ class PowerWall3(Device):
         self.vin = vin
         self.type = get_item_value(config['battery_blocks'], 'vin', vin, 'type')
         id = self.type + '_' + self.vin
-        Device.__init__(self, mqtt_prefix, id)
+        super().__init__(mqtt_prefix, id)
 
         self.via = parent
         self.name = "%s %s" % (config['site_info']['site_name'], self.vin.split('--')[1])
@@ -170,7 +170,7 @@ class TeslaSystem(Device):
             logger.warning("Unable to fetch vitals information")
 
         id = "TeslaEnergySystem_" + config['vin']
-        Device.__init__(self, mqtt_prefix, id)
+        super().__init__(mqtt_prefix, id)
 
         self.tedapi = tedapi
         self.report_vitals = report_vitals

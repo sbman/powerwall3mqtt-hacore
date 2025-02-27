@@ -35,7 +35,7 @@ A simple Home Assistant Add On that acts as a bridge between the Powerwall 3 TED
 ## Pre-reqs
 Connecting directly to the TEDAPI requires communicating with an internal IP on the Powerwall 3 (PW3).  To make this work, you need to add a static route to 192.168.91.1 pointed at the IP of the PW3 Leader on your network.
 -  If you have a segmented network you should add the route on your router.
--  If the PW3 is on the same network segment as Home Assistant, you'll need to add a static route on the Home Assistant server.  You can do that by using the [Static Route Manager add-on](../staticroutes).  For example, if the IP of your PW3 is "192.168.1.151", would would add the following to the Static Route Manager config:
+-  If the PW3 is on the same network segment as Home Assistant, you'll need to add a static route on the Home Assistant server.  You can do that by using the [Static Route Manager add-on](https://github.com/slyglif/haos-addons/tree/main/staticroutes).  For example, if the IP of your PW3 is "192.168.1.151", would would add the following to the Static Route Manager config:
 ```
 - nexthop: 192.168.1.151
   network: 192.168.91.1/32
@@ -44,7 +44,7 @@ Connecting directly to the TEDAPI requires communicating with an internal IP on 
 ## Reporting problems
 - Please switch the Logging Level to DEBUG in Configuration and restart the add-on.
 	- You may need to toggle "Show unused optional configuration options" on.
-- Open an issue at https://github.com/slyglif/haos-addons/issues
+- Open an issue at https://github.com/slyglif/powerwall3mqtt/issues
 	- Describe the issue you are encountering
 	- Include the version of the add-on
 	- Include the logs
