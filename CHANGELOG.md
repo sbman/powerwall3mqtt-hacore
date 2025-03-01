@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] - 2025-03-01
+
+### Fixed
+
+- [Issue #22](https://github.com/slyglif/powerwall3mqtt/issues/22): Added better error handling of errors fetching individual PW vitals (such as PV string info).  Now the app should log an error and continue running, but mark the individual PWs as unavailable in HA.
+
+### Changed
+
+- This release had a major code cleanup and refactoring, simplifying a lot of the individual functions and classes.  With the exception of the protobuf class, it now passes pylint cleanly using the default settings.  It's possible some edge cases could have issues, so please report any stack traces.  This was preparation for adding unit tests in the future.
+
 ## [0.1.3] - 2025-02-27
 
 ### Fixed
@@ -67,7 +77,8 @@
 
 - [Issue #8](https://github.com/slyglif/powerwall3mqtt/issues/8): Shutdowns weren't clean, preventing relavent logs from showing
 
-[unreleased]: https://github.com/slyglif/powerwall3mqtt/compare/v0.1.2...HEAD
+[unreleased]: https://github.com/slyglif/powerwall3mqtt/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/slyglif/powerwall3mqtt/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/slyglif/powerwall3mqtt/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/slyglif/powerwall3mqtt/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/slyglif/powerwall3mqtt/compare/v0.1.0...v0.1.1

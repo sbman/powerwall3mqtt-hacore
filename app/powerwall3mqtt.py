@@ -1,4 +1,7 @@
 #!/usr/bin/python3
+"""
+Powerwall 3 to MQTT for Home Assistant
+"""
 
 import json
 import logging
@@ -6,64 +9,74 @@ import logging.config
 import os
 import random
 import re
-import requests.exceptions
 import signal
 import socket
+import sys
 import threading
 import time
-import traceback
-import yaml
+
+from selectors import DefaultSelector, EVENT_READ
+from threading import Condition, RLock
 
 from paho.mqtt import client as mqtt_client
-from selectors import DefaultSelector, EVENT_READ
-from threading import Condition, RLock, Thread
+import requests.exceptions
+import yaml
 
 import hamqtt.devices
 import pytedapi
 import pytedapi.exceptions
 
-from hamqtt.devices import offline, online
+from hamqtt.devices import OFFLINE
 
 
 # Generate a Client ID with the publish prefix.
-mqtt_id = f'powerwall3mqtt-{random.randint(0, 1000)}'
+MQTT_ID = f'powerwall3mqtt-{random.randint(0, 1000)}'
+WILL_TOPIC = f"{MQTT_ID}/will"
 
-hamqtt.devices.will_topic = "%s/will" % mqtt_id
 hamqtt.devices.origin['name'] = 'powerwall3mqtt'
 #hamqtt.devices.origin['sw'] = '0.0.0'
 #hamqtt.devices.origin['url'] = ''
 
 
-with open("logger.yaml") as stream:
+with open("logger.yaml", 'r', encoding="utf-8") as stream:
     try:
         logging.config.dictConfig(yaml.safe_load(stream))
     except yaml.YAMLError as exc:
         print(exc)
-        exit(1)
+        sys.exit(1)
 
 # Setup logging for this module
 logger = logging.getLogger(__name__)
 
 
 class FatalError(Exception):
-    pass
+    """FataError exception used to break from the main run loop"""
 
 
-class powerwall3mqtt:
+class Powerwall3MQTT:
+    """Main Powerwall 3 to MQTT application class"""
     def __init__(self):
-        self.mqtt = None
-        self.tedapi = None
-        self.tesla = None
-
         self._pause = False
         self._running = True
-        self._runLock = RLock()
-        self._loopWait = Condition(self._runLock)
-        self._shutdown = socket.socketpair()
-        self._ha_status = socket.socketpair()
+        self._run_lock = RLock()
+        self._loop_wait = Condition(self._run_lock)
         self._update_loop = socket.socketpair()
+        self._config = self.loadconfig()
 
-        # Parse the config file
+        # Set the logging level
+        logging.getHandlerByName('console').setLevel(self._config['log_level'].upper())
+
+        logger.debug("Runtime config:")
+        for key in sorted(self._config.keys()):
+            if key.find('password') == -1:
+                logger.debug("config['%s'] = '%s'", key, self._config[key])
+            else:
+                redacted = re.sub('.', 'X', self._config[key])
+                logger.debug("config['%s'] = '%s'", key, redacted)
+
+
+    def loadconfig(self) -> dict:
+        """Method to load and build a config dictionary"""
         config = {
             'log_level': 'WARNING',
             'tedapi_host': pytedapi.GW_IP,
@@ -81,226 +94,264 @@ class powerwall3mqtt:
             'mqtt_cert': None,
             'mqtt_key': None
         }
+
+        # Try to read options.json from HA, but ignore errors
         try:
-            config = config | json.load(open('/data/options.json', 'r'))
-        except:
+            with open('/data/options.json', 'r', encoding="utf-8") as options:
+                config = config | json.load(options)
+        except Exception: # pylint: disable=W0718
             pass
 
         # Use ENV vars for overrides
-        for k in config.keys():
-            if type(config[k]) is bool:
-                setattr(self, k, bool(os.environ.get('POWERWALL3MQTT_CONFIG_%s' % k.upper(), config[k])))
-            elif type(config[k]) is int:
-                setattr(self, k, int(os.environ.get('POWERWALL3MQTT_CONFIG_%s' % k.upper(), config[k])))
+        for k, item in config.items():
+            value = os.environ.get(f"POWERWALL3MQTT_CONFIG_{k.upper()}", item)
+            if isinstance(item, bool):
+                config[k] = bool(value)
+            elif isinstance(item,  int):
+                config[k] = int(value)
             else:
-                setattr(self, k, os.environ.get('POWERWALL3MQTT_CONFIG_%s' % k.upper(), config[k]))
+                config[k] = value
+
+        self.validate(config)
+        return config
 
 
-        # Set the logging level
-        logging.getHandlerByName('console').setLevel(self.log_level.upper())
+    def validate(self, config: dict) -> None:
+        """Method to validate the required keys are in the config dictionary"""
+        if config['tedapi_password'] is None:
+            raise FatalError("tedapi_password not set")
+        if None in (config['mqtt_host'], config['mqtt_port']):
+            raise FatalError("MQTT connection info not set")
+        if None in (config['mqtt_username'], config['mqtt_password']):
+            raise FatalError("MQTT authentication info not set")
+        if config['tedapi_poll_interval'] < 5:
+            raise FatalError("Polling Interval must be >= 5")
+        if (config['mqtt_cert'] is not None) ^ (config['mqtt_key'] is not None):
+            raise FatalError("MQTT Certifcate and Key are both required")
 
-        if None in (self.tedapi_password, self.mqtt_host, self.mqtt_port, self.mqtt_username, self.mqtt_password):
-            raise Exception("Environment not set")
-        if self.tedapi_poll_interval < 5:
-            raise Exception("Polling Interval must be >= 5")
-        if (self.mqtt_cert != None) ^ (self.mqtt_key != None):
-            raise Exception("MQTT Certifcate and Key are both required")
-
-        logger.debug(f"Runtime config:")
-        for key in sorted(config.keys()):
-            if key.find('password') == -1:
-                logger.debug(f"config['{key}'] = {getattr(self, key)}")
-            else:
-                redacted = re.sub('.', 'X', getattr(self, key))
-                logger.debug(f"config['{key}'] = {redacted}")
-
-
-    def catch(self, signum, frame):
-        self._shutdown[1].send(b'\0')
 
 
     def connect_mqtt(self):
+        """Method used to setup the connection to MQTT"""
+        ha_status = socket.socketpair()
+
         def on_ha_status(client, userdata, message):
+            """Callback method to receive online/offline notifications from a topic"""
+            # pylint: disable=W0613 # method signature
             if message.payload == b'online':
-                userdata._ha_status[1].send(b'\1')
+                ha_status[1].send(b'\1')
             else:
-                userdata._ha_status[1].send(b'\0')
+                ha_status[1].send(b'\0')
 
         def on_connect(client, userdata, flags, rc, properties):
+            """Callback method to handle handle MQTT connection events"""
+            # pylint: disable=W0613 # method signature
+            # pylint: disable=W0212 # userdata is self
             if rc == 0:
-                logger.info("Connected to MQTT Broker '%s:%s'" % (userdata.mqtt_host, userdata.mqtt_port))
-                topic = userdata.mqtt_base_topic + "/status"
+                logger.info("Connected to MQTT Broker '%s:%s'",
+                    userdata._config['mqtt_host'],
+                    userdata._config['mqtt_port'])
+                topic = f"{userdata._config['mqtt_base_topic']}/status"
                 client.message_callback_add(topic, on_ha_status)
                 client.subscribe(topic)
-                logger.info("Subscribed to MQTT topic '%s'" % topic)
+                logger.info("Subscribed to MQTT topic '%s'", topic)
             else:
                 logger.error("Failed to connect, return code = %s", rc.getName())
 
-        client = mqtt_client.Client(client_id=mqtt_id, callback_api_version=mqtt_client.CallbackAPIVersion.VERSION2)
+        client = mqtt_client.Client(
+            client_id=MQTT_ID,
+            callback_api_version=mqtt_client.CallbackAPIVersion.VERSION2)
         client.on_connect = on_connect
         client.user_data_set(self)
-        client.will_set(hamqtt.devices.will_topic, offline)
-        logger.debug("MQTT will set on '%s' to '%s'" % (hamqtt.devices.will_topic, offline))
-        if self.mqtt_ssl:
-            client.tls_set(ca_certs=self.mqtt_ca, certfile=self.mqtt_cert, keyfile=self.mqtt_key)
-            client.tls_insecure_set(self.mqtt_verify_tls)
-        client.username_pw_set(self.mqtt_username, self.mqtt_password)
-        client.connect(self.mqtt_host, self.mqtt_port)
-        self.mqtt = client
+        client.will_set(WILL_TOPIC, OFFLINE)
+        logger.debug("MQTT will set on '%s' to '%s'", WILL_TOPIC, OFFLINE)
+        if self._config['mqtt_ssl']:
+            client.tls_set(
+                ca_certs=self._config['mqtt_ca'],
+                certfile=self._config['mqtt_cert'],
+                keyfile=self._config['mqtt_key'])
+            client.tls_insecure_set(self._config['mqtt_verify_tls'])
+        client.username_pw_set(
+            self._config['mqtt_username'],
+            self._config['mqtt_password'])
+        client.connect(self._config['mqtt_host'], self._config['mqtt_port'])
+        return client, ha_status[0]
 
 
-    def getPause(self):
-        with self._runLock:
+    def get_pause(self):
+        """Method to get the current pause state using the run_lock"""
+        with self._run_lock:
             return self._pause
 
 
-    def getRunning(self):
-        with self._runLock:
+    def get_running(self):
+        """Method to get the current run state used the run_lock"""
+        with self._run_lock:
             return self._running
 
 
-    def setPause(self, pause):
-        with self._runLock:
+    def set_pause(self, pause):
+        """Method to set the pause state using the run_lock"""
+        with self._run_lock:
             self._pause = pause
             if not pause:
-                self._loopWait.notify()
+                self._loop_wait.notify()
 
 
-    def setRunning(self, running):
-        with self._runLock:
+    def set_running(self, running):
+        """Method to set the run state using the run_lock"""
+        with self._run_lock:
             self._running = running
             if not running:
-                self._loopWait.notify()
+                self._loop_wait.notify()
 
 
-    def discover(self):
-        discovery = self.tesla.getDiscoveryMessages()
+    def discover(self, mqtt, tesla):
+        """Method to get Tesla system discovery messages and publish them to MQTT"""
+        discovery = tesla.get_discoveries(
+                        prefix=self._config['mqtt_base_topic'],
+                        will_topic=WILL_TOPIC)
         # Send Discovery
         for message in discovery:
-            result = self.mqtt.publish(message['topic'], json.dumps(message['payload']))
+            result = mqtt.publish(message['topic'], json.dumps(message['payload']))
             if result[0] == 0:
-                logger.info("Discovery sent to '%s'" % message['topic'])
+                logger.info("Discovery sent to '%s'", message['topic'])
                 logger.debug("message = %s", json.dumps(message['payload']))
             else:
-                logger.warn("Failed to send '%s' to '%s'" % (message['topic'], message['payload']))
+                logger.warning("Failed to send '%s' to '%s'", message['topic'], message['payload'])
         logger.info("Sleeping 0.5s to allow HA to process discovery")
         time.sleep(0.5)
 
 
-    def main_loop(self):
+    def main_loop(self, shutdown, ha_status, mqtt, tesla):
+        """The main program loop"""
         sel = DefaultSelector()
-        sel.register(self._shutdown[0], EVENT_READ)
-        sel.register(self._ha_status[0], EVENT_READ)
+        sel.register(shutdown, EVENT_READ)
+        sel.register(ha_status, EVENT_READ)
         sel.register(self._update_loop[0], EVENT_READ)
 
         while True:
             for key, _ in sel.select():
                 try:
-                    if key.fileobj == self._shutdown[0]:
-                        self._shutdown[0].recv(1)
+                    if key.fileobj == shutdown:
+                        shutdown.recv(1)
                         logger.info("Received shutdown signal")
-                        self.setRunning(False)
+                        self.set_running(False)
                         return
-                    elif key.fileobj == self._ha_status[0]:
-                        cmd = self._ha_status[0].recv(1)
+                    if key.fileobj == ha_status:
+                        cmd = ha_status.recv(1)
                         if cmd == b'\01':
                             logger.info("Received ha_status online")
-                            self.discover()
-                            self.setPause(False)
+                            self.discover(mqtt, tesla)
+                            self.set_pause(False)
                         else:
                             logger.info("Received ha_status offline")
-                            self.setPause(True)
+                            self.set_pause(True)
                     elif key.fileobj == self._update_loop[0]:
                         self._update_loop[0].recv(1)
                         logger.debug("Processing update from timing_loop")
-                        self.update(True)
+                        self.update(mqtt, tesla, True)
                 except pytedapi.exceptions.TEDAPIRateLimitingException as e:
-                    self.tedapi_poll_interval += 1
+                    self._config['tedapi_poll_interval'] += 1
                     logger.warning(e)
-                    logger.warning(f"Increasing poll interval by 1s to {self.tedapi_poll_interval}")
+                    logger.warning(
+                        "Increasing poll interval by 1s to %d",
+                        self._config['tedapi_poll_interval'])
                 except pytedapi.exceptions.TEDAPIException as e:
                     # Likely fatal, bail out
-                    self.setRunning(False)
+                    self.set_running(False)
                     raise e
-                except TimeoutException as e:
+                except TimeoutError as e:
                     # Likely lock timeout, skip interval
                     logger.warning(e, exc_info=True)
-                except Exception as e:
+                except Exception as e: # pylint: disable=W0718
+                    # Catchall so the loop keeps going
                     logger.exception(e)
 
 
     def run(self):
+        """The main program entry point"""
+        shutdown = socket.socketpair()
+
+        def catch(signum, frame):
+            """Method used to catch signals and notify the main loop to shutdown"""
+            # pylint: disable=W0613 # method signature
+            shutdown[1].send(b'\0')
+
         # Setup signal handling
-        signal.signal(signal.SIGINT, self.catch)
-        signal.signal(signal.SIGTERM, self.catch)
+        signal.signal(signal.SIGINT, catch)
+        signal.signal(signal.SIGTERM, catch)
 
         # Connect to remote services
-        self.connect_mqtt()
+        mqtt, ha_status = self.connect_mqtt()
         try:
-            self.tedapi = pytedapi.TEDAPI(
-                self.tedapi_password,
+            tedapi = pytedapi.TeslaEnergyDeviceAPI(
+                self._config['tedapi_password'],
+                host=self._config['tedapi_host'])
+            powerwall = pytedapi.Powerwall3API(
+                tedapi,
                 cacheexpire=4,
-                configexpire=29,
-                host=self.tedapi_host)
+                configexpire=29)
         except requests.exceptions.ConnectionError as e:
-            raise FatalError("Unable to connect to Powerwall")
-        if not self.tedapi.pw3:
+            raise FatalError("Unable to connect to Powerwall") from e
+        if not tedapi.is_powerwall3():
             raise FatalError("Powerwall appears to be older than Powerwall 3")
 
         # Populate Tesla info
-        self.tesla = hamqtt.devices.TeslaSystem(self.mqtt_base_topic, self.tedapi, self.tedapi_report_vitals)
-        logger.info("Powerwall firmware version = %s" % self.tesla.firmware_version)
-        # TODO: Check for commission date being valid
+        tesla = hamqtt.devices.TeslaSystem(
+            powerwall,
+            self._config['tedapi_report_vitals'])
+        logger.info("Powerwall firmware version = %s", tesla.firmware_version)
 
-        # TODO: use qos=1 or 2 for initial / unpause, 0 for normal
-        self.mqtt.loop_start()
+        mqtt.loop_start()
         try:
             timer = threading.Thread(target=self.timing_loop)
             timer.start()
             try:
-                self.discover()
-                self.update()
-                self.main_loop()
+                self.discover(mqtt, tesla)
+                self.update(mqtt, tesla, True)
+                self.main_loop(shutdown=shutdown[0], ha_status=ha_status, mqtt=mqtt, tesla=tesla)
             finally:
-                self.setRunning(False)
+                self.set_running(False)
                 timer.join()
-        except Exception as e:
-            logger.exception(e)
         finally:
-            self.mqtt.loop_stop()
+            mqtt.loop_stop()
 
 
     def timing_loop(self):
-        with self._loopWait:
-            while self.getRunning():
-                self._loopWait.wait(self.tedapi_poll_interval)
-                if not self.getPause():
+        """A method to run in a separate thread to trigger updates to MQTT"""
+        with self._loop_wait:
+            while self.get_running():
+                self._loop_wait.wait(self._config['tedapi_poll_interval'])
+                if not self.get_pause():
                     self._update_loop[1].send(b'\1')
 
 
-    def update(self, update=False):
+    def update(self, mqtt, tesla, update=False):
+        """Method to get Tesla system state messages and publish them to MQTT"""
         if update:
-            self.tesla.update()
-        sysstate = self.tesla.getStateMessages()
+            tesla.update()
+        sysstate = tesla.get_states(prefix=self._config['mqtt_base_topic'])
         for message in sysstate:
-            result = self.mqtt.publish(message['topic'], json.dumps(message['payload']))
+            result = mqtt.publish(message['topic'], json.dumps(message['payload']))
             if result[0] == 0:
-                logger.info("Sent message to '%s'" % message['topic'])
+                logger.info("Sent message to '%s'", message['topic'])
                 logger.debug("message = %s", json.dumps(message['payload']))
             else:
-                logger.warn("Failed to send '%s' to '%s'" % (message['topic'], message['payload']))
+                logger.warning("Failed to send '%s' to '%s'", message['topic'], message['payload'])
 
 
 
 if __name__ == '__main__':
     try:
-        app = powerwall3mqtt()
+        app = Powerwall3MQTT()
         app.run()
     except FatalError as e:
-        logger.critical("Exiting: %s" % e)
-        exit(1)
-    except Exception as e:
+        logger.critical("Exiting: %s", e)
+        sys.exit(1)
+    except Exception as e: # pylint: disable=W0718
+        # Catch all so all exceptions get logged properly
         logger.exception(e)
-        exit(1)
+        sys.exit(1)
     finally:
         logging.shutdown()
