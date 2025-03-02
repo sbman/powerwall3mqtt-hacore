@@ -85,7 +85,13 @@ class ValueEntity(Entity):
 
     def set(self, value):
         """Function to set the value of the entity"""
-        self.value = value
+        if self.platform == "binary_sensor" and isinstance(value, bool):
+            if value:
+                self.value = "ON"
+            else:
+                self.value = "OFF"
+        else:
+            self.value = value
 
 
 
@@ -178,6 +184,18 @@ class PowerValue(ValueEntity):
             device_class="power",
             unit="W",
             state_class='measurement',
+            enabled=enabled)
+
+
+class Problem(ValueEntity):
+    """Class that maps to a Problem entity in HA"""
+    def __init__(self, id_prefix, name, template = None, enabled = True):
+        super().__init__(
+            id_prefix=id_prefix,
+            name=name,
+            platform="binary_sensor",
+            template=template,
+            device_class="problem",
             enabled=enabled)
 
 

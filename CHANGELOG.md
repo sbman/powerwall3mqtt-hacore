@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.0] - 2025-03-01
+
+### Added
+
+- Added binary_sensors for the following:
+	- Backfeed Limited Alert: This is an installer configuration option on the Powerwall that limits export to the grid.  It seems to be used to control operation before permission to operate is granted, and is turned off by Tesla once permission is granted.  If it is enabled after you have permission to operate you should probably reach out to Tesla.
+	- Battery Comms Alert: Some kind of communication issue between the system and one of it's batteries.
+	- Real Power Config Limited Alert: There was a limit placed on the system during commissioning that prevents generating the amount of power requested.
+	- Missing Battery Alert: This is my own alert, based on two sections of the system configuration not matching.  It should mean one or more of the batteries are offline.
+
 ## [0.2.0] - 2025-03-01
 
 ### Fixed
@@ -77,7 +87,8 @@
 
 - [Issue #8](https://github.com/slyglif/powerwall3mqtt/issues/8): Shutdowns weren't clean, preventing relavent logs from showing
 
-[unreleased]: https://github.com/slyglif/powerwall3mqtt/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/slyglif/powerwall3mqtt/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/slyglif/powerwall3mqtt/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/slyglif/powerwall3mqtt/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/slyglif/powerwall3mqtt/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/slyglif/powerwall3mqtt/compare/v0.1.1...v0.1.2

@@ -228,8 +228,18 @@ class TeslaSystem(Device):
         self.vin = config['vin']
 
         # Home Assistant sensors
+        self.backfeed_limited = entities.ValueEntity(device_id,
+                                    "Backfeed Limited Alert",
+                                    "binary_sensor",
+                                    "backfeed_limited")
         self.battery = entities.Battery(device_id, "Battery")
         self.battery_capacity = entities.EnergyStorage(device_id, "Battery Capacity")
+        self.battery_comms = entities.Problem(device_id,
+                                "Battery Comms Alert",
+                                "battery_comms")
+        self.battery_missing = entities.Problem(device_id,
+                                    "Battery Missing Alert",
+                                    "battery_missing")
         self.battery_power = entities.PowerValue(device_id, "Battery Power")
         self.battery_remaining = entities.EnergyStorage(device_id, "Battery Remaining")
         self.battery_reserve_hidden = entities.EnergyStorage(device_id,
@@ -246,6 +256,10 @@ class TeslaSystem(Device):
         self.inverter_capacity = entities.PowerValue(device_id, "Inverter Capacity")
         self.load_power = entities.PowerValue(device_id, "Load Power")
         self.solar_power = entities.PowerValue(device_id, "Solar Power")
+        self.real_power_config_limited = entities.ValueEntity(device_id,
+                                            "Real Power Config Limited Alert",
+                                            "binary_sensor",
+                                            "real_power_config_limited")
 
         # Home Assistant template sensors
         self.battery_power_in = entities.PowerTemplate(
@@ -317,15 +331,19 @@ class TeslaSystem(Device):
         if conn['ISLAND_GridConnected'] == "ISLAND_GridConnected_Connected":
             self.grid_status.set("ON")
 
-        self.calibration.set('OFF')
-        if "BatteryCalibration" in status['control']['alerts']['active']:
-            self.calibration.set('ON')
+        alerts = status['control']['alerts']['active']
+
+        self.calibration.set("BatteryCalibration" in alerts)
+        self.backfeed_limited.set("BackfeedLimited" in alerts)
+        self.battery_comms.set("BatteryComms" in alerts)
+        self.real_power_config_limited.set("RealPowerConfigLimited" in alerts)
 
         full_pack = status['control']['systemStatus']['nominalFullPackEnergyWh']
         remaining = status['control']['systemStatus']['nominalEnergyRemainingWh']
-        self.battery_reserve_hidden.set(int(full_pack / 20))
-        self.battery_capacity.set(full_pack - self.battery_reserve_hidden.get())
-        self.battery_remaining.set(remaining - self.battery_reserve_hidden.get())
+        reserve = int(full_pack / 20)
+        self.battery_reserve_hidden.set(reserve)
+        self.battery_capacity.set(full_pack - reserve)
+        self.battery_remaining.set(remaining - reserve)
 
         meter = status['control']['meterAggregates']
         self.grid_power.set(round(_get_power(meter, 'SITE'), 2))
@@ -335,6 +353,11 @@ class TeslaSystem(Device):
 
         self.battery.set(self._calc_battery())
         self.battery_time_remaining.set(self._calc_time_remaining())
+
+        # Based on Issue #22, it looks like this could detect if some of the batteries
+        # are offline
+        nominal = int(config['site_info']['nominal_system_energy_ac'])
+        self.battery_missing.set(abs(int((full_pack - reserve)/1000) - nominal) > 1)
 
         self.set_updated(True)
         if self.report_vitals:
