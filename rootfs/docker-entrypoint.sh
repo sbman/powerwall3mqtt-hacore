@@ -25,6 +25,10 @@ export_if_not_set mqtt ssl
 export_if_not_set mqtt username
 export_if_not_set mqtt password
 
+# Clean up bad config entries
+bashio::addon.option mqtt_server
+bashio::addon.option mqtt_username
+
 bashio::log.info "Starting Powerwall3MQTT..."
 cd /app
 exec python3 powerwall3mqtt.py

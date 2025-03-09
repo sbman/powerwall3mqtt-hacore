@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2025-03-09
+
+### Fixed
+
+- [Issue #23](https://github.com/slyglif/powerwall3mqtt/issues/23): Fix the config entry names for MQTT to line up with the names used by HassIO services.  **NOTE: If you need to use the MQTT hostname or username, you will need up update your config before starting the add-on**
+
 ## [0.3.0] - 2025-03-01
 
 ### Added
@@ -87,7 +93,8 @@
 
 - [Issue #8](https://github.com/slyglif/powerwall3mqtt/issues/8): Shutdowns weren't clean, preventing relavent logs from showing
 
-[unreleased]: https://github.com/slyglif/powerwall3mqtt/compare/v0.3.0...HEAD
+[unreleased]: https://github.com/slyglif/powerwall3mqtt/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/slyglif/powerwall3mqtt/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/slyglif/powerwall3mqtt/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/slyglif/powerwall3mqtt/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/slyglif/powerwall3mqtt/compare/v0.1.2...v0.1.3
