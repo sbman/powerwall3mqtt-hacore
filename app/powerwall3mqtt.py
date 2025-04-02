@@ -69,9 +69,9 @@ class Powerwall3MQTT:
         logger.debug("Runtime config:")
         for key in sorted(self._config.keys()):
             if key.find('password') == -1:
-                logger.debug("config['%s'] = '%s'", key, self._config[key])
+                logger.debug("config['%s'] = '%s'", key, self._config[key] if self._config[key] is not None else '')
             else:
-                redacted = re.sub('.', 'X', self._config[key])
+                redacted = re.sub('.', 'X', self._config[key] if self._config[key] is not None else '')
                 logger.debug("config['%s'] = '%s'", key, redacted)
 
 
@@ -122,8 +122,9 @@ class Powerwall3MQTT:
             raise FatalError("tedapi_password not set")
         if None in (config['mqtt_host'], config['mqtt_port']):
             raise FatalError("MQTT connection info not set")
-        if None in (config['mqtt_username'], config['mqtt_password']):
-            raise FatalError("MQTT authentication info not set")
+	if config['mqtt_username]) is not None:
+	        if config['mqtt_password'] is None:
+        	    raise FatalError("MQTT authentication info not set")
         if config['tedapi_poll_interval'] < 5:
             raise FatalError("Polling Interval must be >= 5")
         if (config['mqtt_cert'] is not None) ^ (config['mqtt_key'] is not None):
@@ -171,9 +172,10 @@ class Powerwall3MQTT:
                 certfile=self._config['mqtt_cert'],
                 keyfile=self._config['mqtt_key'])
             client.tls_insecure_set(self._config['mqtt_verify_tls'])
-        client.username_pw_set(
-            self._config['mqtt_username'],
-            self._config['mqtt_password'])
+	if self._config['mqtt_username']:
+            client.username_pw_set(
+                self._config['mqtt_username'],
+                self._config['mqtt_password'])
         client.connect(self._config['mqtt_host'], self._config['mqtt_port'])
         return client, ha_status[0]
 
