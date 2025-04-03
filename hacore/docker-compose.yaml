@@ -1,0 +1,23 @@
+services:
+  pypowerwall:
+      image: powerwall3mqtt-hacore
+      container_name: powerwall3mqtt
+      hostname: pypowerwall3mqtt
+      restart: unless-stopped
+      environment:
+        - log_level=warning
+        - tedapi_host=192.168.91.1
+        - tedapi_password=YOURPASSWORD
+        - tedapi_poll_interval=30
+        - tedapi_report_vitals=False
+        - mqtt_base_topic=homeassistant
+        - mqtt_host=YOURMQTTHOSTIP
+        - mqtt_port=1883
+        - mqtt_verify_tls=False
+        - mqtt_ssl=False
+#        - mqtt_username=YOURMQTTUSERNAME
+#        - mqtt_password=YOURMQTTPASSWORD
+#        - mqtt_ca=CAASNEEDED
+#        - mqtt_cert=CERTASNEEDED
+#        - mqtt_key=KEYASNEEDED
+
