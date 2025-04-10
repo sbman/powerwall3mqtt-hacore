@@ -1,6 +1,6 @@
 services:
   pypowerwall:
-      image: sbmanhome/hasbman:powerwall3mqtt-hacore
+      image: sbmanhome/powerwall3mqtt_hacore
       container_name: powerwall3mqtt
       hostname: pypowerwall3mqtt
       restart: unless-stopped
