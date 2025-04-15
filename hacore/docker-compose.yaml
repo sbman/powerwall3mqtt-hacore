@@ -5,19 +5,18 @@ services:
       hostname: pypowerwall3mqtt
       restart: unless-stopped
       environment:
-        - log_level=warning
-        - tedapi_host=192.168.91.1
-        - tedapi_password=YOURPASSWORD
-        - tedapi_poll_interval=30
-        - tedapi_report_vitals=False
-        - mqtt_base_topic=homeassistant
-        - mqtt_host=YOURMQTTHOSTIP
-        - mqtt_port=1883
-        - mqtt_verify_tls=False
-        - mqtt_ssl=False
-#        - mqtt_username=YOURMQTTUSERNAME
-#        - mqtt_password=YOURMQTTPASSWORD
-#        - mqtt_ca=CAASNEEDED
-#        - mqtt_cert=CERTASNEEDED
-#        - mqtt_key=KEYASNEEDED
-
+        - POWERWALL3MQTT_CONFIG_LOG_LEVEL=warning
+        - POWERWALL3MQTT_CONFIG_TEDAPI_HOST=192.168.91.1
+        - POWERWALL3MQTT_CONFIG_TEDAPI_PASSWORD=YOURPASSWORD
+        - POWERWALL3MQTT_CONFIG_TEDAPI_POLL_INTERVAL=30
+        - POWERWALL3MQTT_CONFIG_TEDAPI_REPORT_VITALS=False
+        - POWERWALL3MQTT_CONFIG_MQTT_BASE_TOPIC=homeassistant
+        - POWERWALL3MQTT_CONFIG_MQTT_HOST=YOURMQTTHOSTIP
+        - POWERWALL3MQTT_CONFIG_MQTT_PORT=1883
+        - POWERWALL3MQTT_CONFIG_MQTT_VERIFY_TLS=False
+        - POWERWALL3MQTT_CONFIG_MQTT_SSL=False
+#        - POWERWALL3MQTT_CONFIG_MQTT_USERNAME=YOURMQTTUSERNAME
+#        - POWERWALL3MQTT_CONFIG_MQTT_PASSWORD=YOURMQTTPASSWORD
+#        - POWERWALL3MQTT_CONFIG_MQTT_CA=CAASNEEDED
+#        - POWERWALL3MQTT_CONFIG_MQTT_CERT=CERTASNEEDED
+#        - POWERWALL3MQTT_CONFIG_MQTT_KEY=KEYASNEEDED
